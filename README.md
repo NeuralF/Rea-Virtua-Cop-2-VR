@@ -1,5 +1,4 @@
-# Rea-Virtua-Cop-2-VR — beta
-Native VR mod for Virtua Cop 2 (1997 PC) — reconstructs the real 3D scene from the game's renderer and plays it through OpenXR with a motion-controller light gun.
+# Virtua Cop 2 VR (VC2VR) — beta
 
 **Beta release.** Shooting, aiming, zoom and menus work end to end; some level
 sections still show draw-order glitches (see Known issues). Feedback welcome.
@@ -31,20 +30,24 @@ arcade cabinet.
 
 ## Installation
 
-The game hard-codes its 1997 folder layout: the exe lives in `PROJECT\` and
-loads data from `..\BIN\`, relative to the working directory:
+The 1997 game loads its data from `..\BIN\` - one level ABOVE its working
+directory. A default install puts `PPJ2DD.EXE` in the game root next to the
+`BIN` folder, so launched from there it cannot find its own data (it then
+goes hunting for a CD and dies with `not found <drive>:\...\MOTCMN.BIN`).
+The fix is a subfolder:
 
 ```
-VCOP2\
-  BIN\        <- game data (MOTCMN.BIN, stage data, textures)
-  PROJECT\    <- PPJ2DD.EXE and the game's DLLs  <- the mod goes HERE
+<game folder>\
+  BIN\        <- game data, already there
+  PROJECT\    <- CREATE this folder
 ```
 
-1. Install Virtua Cop 2, keep that layout intact, and make sure the game runs
-   on its own. Always start it with `PROJECT` as the working directory - a
-   shortcut with an empty "Start in" field dies with
-   `not found ..\BIN\MOTCMN.BIN`.
-2. Copy `HGL_VIEW.DLL` and `HGL_VIEW.ini` into `PROJECT\`, next to `PPJ2DD.EXE`.
+1. Create a `PROJECT` folder inside the game folder and copy ALL files
+   from the game root into it - files only, not the folders (`BIN` stays
+   where it is). Check that the game runs from there on its own. Always start it with `PROJECT` as the working
+   directory - a shortcut with an empty "Start in" field brings the
+   data error back.
+2. Copy `HGL_VIEW.DLL` and `HGL_VIEW.ini` into that `PROJECT\` folder too.
 3. Put `VC2VR.exe`, `VC2VR.ini` and `openxr_loader.dll` together in any folder
    (they do not need to be near the game).
 4. That is all - no wrappers or other third-party files are needed.
@@ -64,8 +67,9 @@ VCOP2\
 
 If the game itself dies on start with `not found ...BIN\MOTCMN.BIN` (or a
 similar `.BIN` path on some drive letter), it could not find its data: the
-`BIN` folder is not one level above the exe, or the working directory is not
-the `PROJECT` folder. This is the game's own loader, not the mod.
+`BIN` folder is not one level above the working directory - the exe is
+still in the game root, or the shortcut's "Start in" is wrong. See the
+Installation section; this is the game's own loader, not the mod.
 
 If VR input works but no picture arrives (the `--window` title shows 0
 triangles): the game is drawing through a different renderer. The mod's hooks
