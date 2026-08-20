@@ -6,7 +6,7 @@ sections still show draw-order glitches (see Known issues). Feedback welcome.
 ![gameplay](media/gameplay.gif)
 
 A native VR mod for the 1997 PC port of **Virtua Cop 2**. Not a flat screen in a
-headroom — the mod intercepts the game's software renderer, reconstructs the real
+headset — the mod intercepts the game's software renderer, reconstructs the real
 3D scene from the geometry the engine projects every frame, and re-renders it
 for your headset through OpenXR, with the game's original textures, lighting and
 sky. Your motion controller is the light gun: point and shoot, exactly like the
