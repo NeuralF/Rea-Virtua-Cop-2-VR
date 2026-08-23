@@ -1,4 +1,4 @@
-# Virtua Cop 2 VR (VC2VR) — beta
+# Virtua Cop 2 VR (VC2VR) - beta
 
 **Beta release.** Shooting, aiming, zoom and menus work end to end; some level
 sections still show draw-order glitches (see Known issues). Feedback welcome.
@@ -6,7 +6,7 @@ sections still show draw-order glitches (see Known issues). Feedback welcome.
 ![gameplay](media/gameplay.gif)
 
 A native VR mod for the 1997 PC port of **Virtua Cop 2**. Not a flat screen in a
-headset — the mod intercepts the game's software renderer, reconstructs the real
+headset - the mod intercepts the game's software renderer, reconstructs the real
 3D scene from the geometry the engine projects every frame, and re-renders it
 for your headset through OpenXR, with the game's original textures, lighting and
 sky. Your motion controller is the light gun: point and shoot, exactly like the
@@ -14,7 +14,7 @@ arcade cabinet.
 
 * Full 6DoF view of the actual level geometry (look around corners the flat
   game never showed)
-* Motion-controller light gun with a laser sight — where the laser points is
+* Motion-controller light gun with a laser sight - where the laser points is
   where the game registers the hit, at any zoom level
 * The game's own cinematic zoom moments are mirrored in VR automatically
 * Menus, cutscenes and score screens appear on a floating screen you can click
@@ -30,11 +30,21 @@ arcade cabinet.
 
 ## Installation
 
-The 1997 game loads its data from `..\BIN\` - one level ABOVE its working
-directory. A default install puts `PPJ2DD.EXE` in the game root next to the
-`BIN` folder, so launched from there it cannot find its own data (it then
-goes hunting for a CD and dies with `not found <drive>:\...\MOTCMN.BIN`).
-The fix is a subfolder:
+The mod does not care where it lives; it just has to sit next to `PPJ2DD.EXE`.
+The `PROJECT` folder below is only there because of the game's own 1997 loader,
+which looks for its data at `..\BIN\`, one level ABOVE the working directory.
+Depending on how your copy is laid out that may already resolve - and if it
+does not, the game goes hunting for a CD and dies with
+`not found <drive>:\...\MOTCMN.BIN`.
+
+So, before anything else: **start the game from your game folder, without the
+mod.**
+
+**If it runs:** copy `HGL_VIEW.DLL` and `HGL_VIEW.ini` into that same folder,
+next to `PPJ2DD.EXE`. That side is done.
+
+**If it dies with a `.BIN` path error:** it cannot see its own data from there
+and has to run one level deeper.
 
 ```
 <game folder>\
@@ -42,43 +52,48 @@ The fix is a subfolder:
   PROJECT\    <- CREATE this folder
 ```
 
-1. Create a `PROJECT` folder inside the game folder and copy ALL files
-   from the game root into it - files only, not the folders (`BIN` stays
-   where it is). Check that the game runs from there on its own. Always start it with `PROJECT` as the working
-   directory - a shortcut with an empty "Start in" field brings the
-   data error back.
-2. Copy `HGL_VIEW.DLL` and `HGL_VIEW.ini` into that `PROJECT\` folder too.
-3. Put `VC2VR.exe`, `VC2VR.ini` and `openxr_loader.dll` together in any folder
-   (they do not need to be near the game).
-4. That is all - no wrappers or other third-party files are needed.
+Create the `PROJECT` folder inside the game folder and copy ALL files from the
+game root into it - files only, not the folders (`BIN` stays where it is).
+Check that the game now runs from there on its own, then copy `HGL_VIEW.DLL`
+and `HGL_VIEW.ini` into `PROJECT\` as well. Always launch it with `PROJECT` as
+the working directory - a shortcut with an empty "Start in" field brings the
+data error straight back.
+
+Either way, finally: put `VC2VR.exe`, `VC2VR.ini` and `openxr_loader.dll`
+together in any folder (they do not need to be near the game). That is all - no
+wrappers or other third-party files are needed.
 
 ## Running
 
 1. Start your VR runtime (e.g. SteamVR).
-2. Start the game. The graphics selector lists the game's own renderers
-   (Direct Draw, Direct 3D) plus **Direct 3D + 3D view** - that entry IS the
-   mod (it proxies the game's Direct 3D renderer). Pick it. The choice is
+2. Start the game and pick the mod's renderer. There is no launcher or setup
+   dialog - the selector lives in the game window's own menu bar, which is
+   hidden until you ask for it: focus the game window, press **Alt** to bring
+   the menu up, then open **Device**. The list holds the game's own renderers
+   (Direct Draw, Direct 3D) plus **Direct 3D + 3D view** - that last entry IS
+   the mod (it proxies the game's Direct 3D renderer). Pick it. The choice is
    remembered in `vcop2.ini`, so this is a one-time step per install.
 3. Start a level.
 4. Run `VC2VR.exe` and put the headset on. The mod pulls the game window to the
    front by itself (the game pauses when unfocused), finds the game process and
-   starts mirroring. Stand facing your monitor at that moment — the first head
+   starts mirroring. Stand facing your monitor at that moment - the first head
    pose becomes the camera.
 
 If the game itself dies on start with `not found ...BIN\MOTCMN.BIN` (or a
 similar `.BIN` path on some drive letter), it could not find its data: the
-`BIN` folder is not one level above the working directory - the exe is
-still in the game root, or the shortcut's "Start in" is wrong. See the
-Installation section; this is the game's own loader, not the mod.
+`BIN` folder is not one level above the working directory. Either the exe is
+running from the game root when it needs the subfolder, or the shortcut's
+"Start in" is wrong. See the Installation section; this is the game's own
+loader, not the mod.
 
 If VR input works but no picture arrives (the `--window` title shows 0
 triangles): the game is drawing through a different renderer. The mod's hooks
 install as soon as the game scans its renderer DLLs, but geometry only flows
-when **Direct 3D + 3D view** is the selected device - pick it again in the
-selector, or carry your old `vcop2.ini` over.
+when **Direct 3D + 3D view** is the selected device - pick it again under
+Alt -> Device, or carry your old `vcop2.ini` over.
 
 If the headset shows "waiting for the game": the D3D + 3D view mode was not
-selected, or `share=0` in HGL_VIEW.ini. `VC2VR.exe --window` renders to a flat
+selected (Alt -> Device), or `share=0` in HGL_VIEW.ini. `VC2VR.exe --window` renders to a flat
 window instead of the headset, which is useful to tell a game-side problem from
 a VR-runtime problem.
 
@@ -89,8 +104,8 @@ a VR-runtime problem.
 | Trigger                  | Fire (the hand that fired last holds the gun) |
 | A / X                    | Reload (Start / Enter in menus)               |
 | B / Y                    | Back (Esc)                                    |
-| Thumbstick — flick up    | Zoom toggle (flick again to drop it)          |
-| Thumbstick — click       | Floating menu screen: auto / always / off     |
+| Thumbstick - flick up    | Zoom toggle (flick again to drop it)          |
+| Thumbstick - click       | Floating menu screen: auto / always / off     |
 | Grip (squeeze)           | Recenter view                                 |
 
 ## Configuration
@@ -111,7 +126,7 @@ The game draws through a pluggable renderer DLL (`HGL_D3D.DLL`). This mod's
 submits, and un-projects it back into 3D using the projection values the game
 is using *that frame* (the engine changes its FOV at runtime). Decoded textures,
 geometry and the engine's own depth keys go into shared memory. A separate
-64-bit process, `VC2VR.exe`, renders that scene for both eyes via OpenXR — two
+64-bit process, `VC2VR.exe`, renders that scene for both eyes via OpenXR - two
 processes because a 32-bit game and a 64-bit VR runtime cannot share one.
 Controller aim is ray-cast against the reconstructed scene and the hit is
 projected back through the game's live camera into the game's own light-gun
@@ -121,9 +136,9 @@ input, so the laser and the game always agree on where you shot.
 
 * Occasional draw-order glitches on some level sections (engine blend/fog
   flags are not fully decoded yet).
-* Magnified view amplifies head shake — physics, not a bug; lower the `zoom`
+* Magnified view amplifies head shake - physics, not a bug; lower the `zoom`
   cap if it bothers you.
-* If the floating menu screen stays black, run the game windowed — the
+* If the floating menu screen stays black, run the game windowed - the
   screen capture cannot see an exclusive-fullscreen window.
 
 ## Building from source
