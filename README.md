@@ -1,169 +1,143 @@
-# Virtua Cop 2 VR (VC2VR) - beta
+# Virtua Cop 2 VR (VC2VR) - v1.0 beta
 
-**Beta release.** Shooting, aiming, zoom and menus work end to end; some level
-sections still show draw-order glitches (see Known issues). Feedback welcome.
+A native VR mod for the 1997 PC port of **Virtua Cop 2**. The mod intercepts the
+game's renderer, rebuilds the real 3D scene from the geometry the engine draws
+every frame, and renders it for the headset through OpenXR. Your motion
+controller is the light gun.
 
 ![gameplay](media/gameplay.gif)
 
-A native VR mod for the 1997 PC port of **Virtua Cop 2**. Not a flat screen in a
-headset - the mod intercepts the game's software renderer, reconstructs the real
-3D scene from the geometry the engine projects every frame, and re-renders it
-for your headset through OpenXR, with the game's original textures, lighting and
-sky. Your motion controller is the light gun: point and shoot, exactly like the
-arcade cabinet.
-
-* Full 6DoF view of the actual level geometry (look around corners the flat
-  game never showed)
-* Motion-controller light gun with a laser sight - where the laser points is
-  where the game registers the hit, at any zoom level
-* The game's own cinematic zoom moments are mirrored in VR automatically
-* Menus, cutscenes and score screens appear on a floating screen you can click
-  with the laser
+* Full 6DoF view of the actual level, 360 degrees around you
+* Motion-controller light gun with a laser sight and a revolver model in the hand
+* Two controllers = two guns (akimbo), the second one plays as player 2
+* The game's cinematic zoom moments are mirrored automatically
+* Menus and score screens on a floating screen you click with the laser
+* The game's own sky, wrapped onto a dome
 * No game files are modified on disk
 
 ## Requirements
 
-* Your own copy of **Virtua Cop 2 for PC** (1997). No game files are included
-  in this mod and none ever will be.
-* A PC VR headset with an OpenXR runtime (SteamVR, Oculus/Meta Link, etc.)
-* Windows, x64
+* Your own copy of Virtua Cop 2 for PC (1997). No game files are included.
+* A PC VR headset with an OpenXR runtime (SteamVR, Meta Link, etc.)
+* Windows x64
 
 ## Installation
 
-The mod does not care where it lives; it just has to sit next to `PPJ2DD.EXE`.
-The `PROJECT` folder below is only there because of the game's own 1997 loader,
-which looks for its data at `..\BIN\`, one level ABOVE the working directory.
-Depending on how your copy is laid out that may already resolve - and if it
-does not, the game goes hunting for a CD and dies with
-`not found <drive>:\...\MOTCMN.BIN`.
+Nothing to configure. Copy the contents of the release zip into the game
+folder, next to `PPJ2DD.EXE`, and run `VC2VR.exe`.
 
-So, before anything else: **start the game from your game folder, without the
-mod.**
-
-**If it runs:** copy `HGL_VIEW.DLL` and `HGL_VIEW.ini` into that same folder,
-next to `PPJ2DD.EXE`. That side is done.
-
-**If it dies with a `.BIN` path error:** it cannot see its own data from there
-and has to run one level deeper.
-
-```
-<game folder>\
-  BIN\        <- game data, already there
-  PROJECT\    <- CREATE this folder
-```
-
-Create the `PROJECT` folder inside the game folder and copy ALL files from the
-game root into it - files only, not the folders (`BIN` stays where it is).
-Check that the game now runs from there on its own, then copy `HGL_VIEW.DLL`
-and `HGL_VIEW.ini` into `PROJECT\` as well. Always launch it with `PROJECT` as
-the working directory - a shortcut with an empty "Start in" field brings the
-data error straight back.
-
-Either way, finally: put `VC2VR.exe`, `VC2VR.ini` and `openxr_loader.dll`
-together in any folder (they do not need to be near the game). That is all - no
-wrappers or other third-party files are needed.
+If the game did not start from its own folder even before the mod (it dies
+with a `...BIN\MOTCMN.BIN` not found error), its 1997 loader wants the data one
+level up. Create a `PROJECT` folder inside the game folder, copy every file
+from the game folder into it (files only, `BIN` stays where it is), copy the
+mod in there too, and run everything from `PROJECT`.
 
 ## Running
 
-1. Start your VR runtime (e.g. SteamVR).
-2. Start the game and pick the mod's renderer. There is no launcher or setup
-   dialog - the selector lives in the game window's own menu bar, which is
-   hidden until you ask for it: focus the game window, press **Alt** to bring
-   the menu up, then open **Device**. The list holds the game's own renderers
-   (Direct Draw, Direct 3D) plus **Direct 3D + 3D view** - that last entry IS
-   the mod (it proxies the game's Direct 3D renderer). Pick it. The choice is
-   remembered in `vcop2.ini`, so this is a one-time step per install.
-3. Start a level.
-4. Run `VC2VR.exe` and put the headset on. The mod pulls the game window to the
-   front by itself (the game pauses when unfocused), finds the game process and
-   starts mirroring. Stand facing your monitor at that moment - the first head
-   pose becomes the camera.
+1. Start your VR runtime.
+2. Run `VC2VR.exe`. It starts the game, switches it to the mod's renderer and
+   to windowed mode (`vcop2.ini`), brings the game window to the front and
+   connects. Full-screen mode does not work with the mod. Keep the game's
+   disc image mounted - the music comes from it.
+3. Put the headset on facing your monitor - the first head pose becomes the
+   camera. Squeeze the grip to recentre at any time.
 
-If the game itself dies on start with `not found ...BIN\MOTCMN.BIN` (or a
-similar `.BIN` path on some drive letter), it could not find its data: the
-`BIN` folder is not one level above the working directory. Either the exe is
-running from the game root when it needs the subfolder, or the shortcut's
-"Start in" is wrong. See the Installation section; this is the game's own
-loader, not the mod.
-
-If VR input works but no picture arrives (the `--window` title shows 0
-triangles): the game is drawing through a different renderer. The mod's hooks
-install as soon as the game scans its renderer DLLs, but geometry only flows
-when **Direct 3D + 3D view** is the selected device - pick it again under
-Alt -> Device, or carry your old `vcop2.ini` over.
-
-If the headset shows "waiting for the game": the D3D + 3D view mode was not
-selected (Alt -> Device), or `share=0` in HGL_VIEW.ini. `VC2VR.exe --window` renders to a flat
-window instead of the headset, which is useful to tell a game-side problem from
-a VR-runtime problem.
+`VC2VR.exe --window` renders to a flat window instead of the headset, which
+tells a game-side problem from a VR-runtime one.
 
 ## Controls
 
-| Input                    | Action                                        |
-|--------------------------|-----------------------------------------------|
-| Trigger                  | Fire (the hand that fired last holds the gun) |
-| A / X                    | Reload (Start / Enter in menus)               |
-| B / Y                    | Back (Esc)                                    |
-| Thumbstick - flick up    | Zoom toggle (flick again to drop it)          |
-| Thumbstick - click       | Floating menu screen: auto / always / off     |
-| Grip (squeeze)           | Recenter view                                 |
+| Input                 | Action                                            |
+|-----------------------|---------------------------------------------------|
+| Trigger               | Fire                                              |
+| A / X                 | Reload (Start / Enter in menus)                   |
+| B / Y                 | Back (Esc)                                        |
+| Thumbstick - flick up | Zoom toggle                                       |
+| Thumbstick - click    | Floating menu screen: auto / always / off         |
+| Grip                  | Recentre                                          |
+
+With akimbo on, the second controller is player 2: press its A / X to join.
+
+## Local multiplayer
+
+A second person can play on the monitor. `window = 1` in HGL_VIEW.ini opens a
+flat view of the same world (F11 for full screen); the second controller is
+player 2, aiming by the game's own crosshair on that window. Set
+`hidexhair = 3` in HGL_VIEW.ini so that crosshair stays visible, and
+`akimbo = 1` in both ini files (the release ships with it on).
 
 ## Configuration
 
-`VC2VR.ini` (VR side): `msaa`, `supersample`, `zoom` (magnification cap, %),
-`zoomspeed` (glide speed), `autozoom` (follow the game's own cinematic zoom),
-`hidecross` (hide the game's flat crosshair sprite, the laser replaces it),
-`aimreach` (where the laser ends on a miss, metres), `focusgame`.
+`VC2VR.ini` - VR side: picture quality, zoom, gun model, akimbo.
+`HGL_VIEW.ini` - game side: world scale (`units_per_metre`), 360-degree
+machinery, HUD. Both files are short and commented.
 
-`HGL_VIEW.ini` (game side): `units_per_metre` (world scale; smaller if the
-world feels like a dollhouse, larger if gigantic), capture and rendering keys.
-Both files are commented.
+## Rendering glitches
 
-## How it works (short version)
+The world is reconstructed from what a 1997 software renderer emits, not from
+level files, so some sections show odd polygons, wrong draw order or a missing
+backdrop. These are fixed by hand, one at a time, and the whole game is
+playable from start to finish.
 
-The game draws through a pluggable renderer DLL (`HGL_D3D.DLL`). This mod's
-`HGL_VIEW.DLL` sits in front of it, reads every textured quad the engine
-submits, and un-projects it back into 3D using the projection values the game
-is using *that frame* (the engine changes its FOV at runtime). Decoded textures,
-geometry and the engine's own depth keys go into shared memory. A separate
-64-bit process, `VC2VR.exe`, renders that scene for both eyes via OpenXR - two
-processes because a 32-bit game and a 64-bit VR runtime cannot share one.
-Controller aim is ray-cast against the reconstructed scene and the hit is
-projected back through the game's live camera into the game's own light-gun
-input, so the laser and the game always agree on where you shot.
+Part of what looks broken was simply never drawn: the game rendered a narrow
+window from a fixed angle, and what lay outside it - floors under the camera,
+the backs of things - does not exist in the data. A zoom through a scope on
+the gun was tried and dropped; it does not fit this kind of gameplay.
 
-## Known issues
+Doing this properly means remaking the game for VR from scratch, which is
+beyond this project. This is close to as far as the approach can go.
 
-* Occasional draw-order glitches on some level sections (engine blend/fog
-  flags are not fully decoded yet).
-* Magnified view amplifies head shake - physics, not a bug; lower the `zoom`
-  cap if it bothers you.
-* If the floating menu screen stays black, run the game windowed - the
-  screen capture cannot see an exclusive-fullscreen window.
+## How it works
+
+The game draws through a pluggable renderer DLL. `HGL_VIEW.DLL` sits in front
+of it, takes every polygon with the transform the engine used that frame, draws
+the scene five more times with the camera turned to get the full 360 degrees,
+and publishes geometry, textures and depth keys to shared memory. `VC2VR.exe`,
+a separate 64-bit process, renders that for both eyes via OpenXR and feeds the
+controller aim back into the game's light-gun input.
 
 ## Building from source
 
-Cross-compiles from Linux with mingw-w64. OpenXR headers: `include/openxr/*.h`
-from [OpenXR-SDK](https://github.com/KhronosGroup/OpenXR-SDK) tag
-`release-1.0.34` into `./oxr/openxr/`.
+Cross-compiles from Linux with mingw-w64 (gcc 13). OpenXR headers go into
+`./inc/openxr/` (from the Khronos OpenXR-SDK, or `apt install libopenxr-dev`).
 
 ```
-x86_64-w64-mingw32-gcc -O2 -s -I oxr -o VC2VR.exe src/vc2vr.c \
-    -ld3d11 -ld3dcompiler -ldxgi -ldxguid -luser32
-i686-w64-mingw32-gcc  -O2 -s -shared -o HGL_VIEW.DLL src/hgl_view.c \
-    -Wl,--kill-at -ld3d11 -ld3dcompiler -luser32 -lgdi32 -ldxguid
+i686-w64-mingw32-gcc -O2 -s -shared -Wl,--kill-at -Wl,--image-base=0x69600000 \
+    -o HGL_VIEW.DLL src/hgl_view.c -static-libgcc \
+    -lgdi32 -luser32 -ld3d11 -ld3dcompiler -ldxguid -lole32 -lwinmm
+x86_64-w64-mingw32-gcc -O2 -s -Iinc -o VC2VR.exe src/vc2vr.c \
+    -ld3d11 -ldxgi -ld3dcompiler -ldxguid -luuid -lgdi32 -luser32 -lole32
 ```
 
-`vc2vr.c` builds the exact released VC2VR.exe. `hgl_view.c` is the full
-renderer of the released DLL, but the released binary additionally contains a
-small (~3.5 KB) joystick input module that emulates the light gun for the
-game; its source is being reconstructed and will land in this repo - until
-then a DLL built from this file renders but does not shoot. Use the released
-DLL.
+Both build the released binaries byte for byte, bar the PE timestamp. The DLL
+must be named exactly `HGL_VIEW.DLL`, and the game loads every file whose name
+starts with that, so keep one.
+
+Two diagnostics live in the DLL, off by default: `floorprobe` (lists the flat
+objects under the camera) and `shotlog` (every sprite of every frame for N ms
+after the trigger). `feetfill` lays copies of the nearest floor tile under the
+feet; it turned out unnecessary and stays off.
+
+## Changelog
+
+**v1.0 beta**
+* 360-degree rendering - you can look behind you. The engine only ever draws
+  a 60-degree window, so the scene is drawn five more times with the camera
+  turned and every object the engine ever shows is remembered
+* Revolver model in the hand (OBJ + BMP texture), recoil and reload animation
+* Akimbo - second controller as player 2, local multiplayer on the monitor
+* Better VR sights: laser from the muzzle, angle-sized dot
+* HUD tied to the zoom and drawn sharp
+* Fixed the brightness (gamma) and the wrong world scale
+* Sky dome nailed to the world, distant backdrops pushed out along their rays
+* A good part of the rendering glitches fixed; a fair number remain
+* Full source of the DLL, including the light-gun input module
+
+**v0.9 beta** - first public build.
 
 ## Legal
 
-This mod contains **no assets or code from Virtua Cop 2**. It is a fan-made
-interoperability project provided as-is, free, for owners of the original
-game. Virtua Cop 2 is © SEGA. Not affiliated with or endorsed by SEGA.
+This mod contains no assets or code from Virtua Cop 2. It is a fan-made
+interoperability project, free, as-is, for owners of the original game.
+Virtua Cop 2 is (c) SEGA. Not affiliated with or endorsed by SEGA.
 `openxr_loader.dll` is from the Khronos OpenXR SDK (Apache 2.0).

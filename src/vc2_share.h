@@ -86,7 +86,19 @@ typedef struct {
     unsigned int vertex_count;
     float        fov_degrees;              /* the game's horizontal field of view */
     float        units_per_metre;
-    unsigned int reserved[9];
+
+    /* Second light gun (akimbo). Carved out of the old reserved[9] so the
+     * layout of everything below is unchanged and the struct size is the same
+     * - a v8 binary that ignores these fields interoperates with one that uses
+     * them, no version bump needed. aim2 is the SECOND hand, fed to the game's
+     * joystick id 1 (device type 4). akimbo != 0 means the VR side is driving
+     * two guns; the game side only forces two players / device type 4 when it
+     * sees this set, so a normal single-gun session is bit-for-bit as before. */
+    volatile unsigned int akimbo;          /* 0 = one gun (default), 1 = two    */
+    volatile unsigned int aim2_seq;
+    float        aim2_x, aim2_y;
+    unsigned int aim2_buttons;
+    unsigned int reserved[4];
 
     /* written by the VR side, read by the game side: where the controller is
      * pointing, in the game's own 640x480 screen space, for the light gun.
