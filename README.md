@@ -72,6 +72,12 @@ player 2, aiming by the game's own crosshair on that window. Set
 `HGL_VIEW.ini` - game side: world scale (`units_per_metre`), 360-degree
 machinery, HUD. Both files are short and commented.
 
+The EU/PAL `PPJ2DD.EXE` tested with SHA256
+`1AA51AC02F8612FA8367D3DE8D6926DE23F77B7D4FA83BB771E71D46151A2623`
+uses different light-gun and player-state offsets. The DLL selects those offsets
+only when four instructions in the running game match; other executables keep
+the original input path.
+
 ## Rendering glitches
 
 The world is reconstructed from what a 1997 software renderer emits, not from
