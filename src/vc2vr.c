@@ -2853,8 +2853,8 @@ static int handleControllers(XrSession session, XrSpace space, XrTime when,
         unsigned buttons2 = 0;
         g_frame->akimbo = 1;
         if (fire[oh].isActive && fire[oh].currentState) buttons2 |= VC2_BTN_FIRE;
-        /* PLAYER 2 HAS TO PRESS START HIMSELF. 0x0040D300 only draws the second
-         * crosshair when byte [0x004CF1E5] == 2 - "player 2 is in the game" -
+        /* PLAYER 2 HAS TO PRESS START HIMSELF. The game only draws the second
+         * crosshair when its player state is 2 - "player 2 is in the game" -
          * and nothing sets that until P2's own Start arrives on his own device.
          * Gun 2 used to be trigger-only "so its thumb does not fight the menus",
          * which is precisely why akimbo never started: the second player was
