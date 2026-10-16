@@ -45,6 +45,16 @@ mod in there too, and run everything from `PROJECT`.
 `VC2VR.exe --window` renders to a flat window instead of the headset, which
 tells a game-side problem from a VR-runtime one.
 
+## Optional cheats
+
+Pass `--infinite-ammo`, `--infinite-lives`, or both to `VC2VR.exe`. A launcher
+can pass the same flags. Both players are covered; cheats stop when VC2VR exits.
+They are off by default and change only the running game's memory.
+
+These flags work only with the verified EU/PAL `PPJ2DD.EXE` below. The console
+reports whether cheats are ready or the game is unsupported. Update
+`VC2VR.exe` and `HGL_VIEW.DLL` together for this feature.
+
 ## Controls
 
 | Input                 | Action                                            |

@@ -2066,52 +2066,9 @@ static void __attribute__((force_align_arg_pointer)) __cdecl camThunk(void *cam)
  * wrap_quad). The far chunk is where the tall harbour structures live -
  * the wedges by the ship are the scraps of them that leaked in through the
  * near lists. */
-/* ---- nolifedec: the player cannot die while a probe run is on ----
- * The damage handler (0x0040CE08) takes one word off the player's lives at
- * two sites - 0x0040CE7D and 0x0040CEC4, both "66 FF 4E 28", dec word
- * [esi+0x28] - and calls the death path when the word goes to zero. Found by
- * a two-snapshot diff on a deliberate hit: the live counter is word
- * 0x0052B948 (display copies at 0x004CF1A2/A3). NOPing the two decs keeps
- * every other part of a hit - the flash, the sound, the invulnerability
- * window at [esi+0x2e] - and only the counter stands still. Live key, both
- * directions: 1 patches, 0 puts the original bytes back. For working, not
- * for playing. */
-static int g_noLifeDec;                 /* [view] nolifedec                     */
-static int g_lifeDecState;              /* 0 original, 1 patched, 2 hands off   */
-
-/* Session 25 learnt the hard way that there is not ONE decrement: the
- * handler at 0x40CE08 carries three (0x40CB7C, 0x40CE7D, 0x40CEC4, 0x40CFEE
- * across its neighbours) and a fifth lives at 0x416F81 as a direct
- * dec word [0x52B8F8] - and the ordinary bullet hit went through a site the
- * first build had not patched. All five now, each verified byte for byte
- * before touching, and on top of that a once-a-second top-up of both lives
- * words back to 7 while the key is on - so even a sixth site nobody has
- * found yet cannot kill the player between two seconds. */
-static void lifeDecApply(void)
-{
-    /* Session 25, third try, and this time from evidence rather than from a
-     * disassembly hunch. The five "dec" sites the earlier builds NOPed
-     * (0x40CB7C.. and dec word [0x52B8F8]) belong to the AMMUNITION: the
-     * word 0x52B8F8 read 6 while the HUD showed seven lives, both before
-     * and after the deliberate hit. The only cells in the scanned data
-     * segment that actually followed that hit (7 -> 6, live, on the
-     * player's own screen) are the bytes at 0x4CF1A2/A3 - fields +2/+3 of
-     * the player block at 0x4CF1A0 (stride 0x44, player 2 at 0x4CF1E4).
-     * So no code is patched at all any more: while nolifedec is on, the
-     * counter is simply written back to 7 every world frame, for a player
-     * whose state byte (+1 == 2) says he is in the round. A hit still
-     * flashes and still shoves the camera; the byte recovers within a
-     * frame, and the death branch never sees a zero. */
-    BYTE *pl;
-    if (!g_noLifeDec) { g_lifeDecState = 0; return; }
-    g_lifeDecState = 1;
-    for (pl = (BYTE *)0x004CF1A0; pl <= (BYTE *)0x004CF1E4; pl += 0x44) {
-        if (IsBadReadPtr(pl, 4) || IsBadWritePtr(pl, 4)) continue;
-        if (pl[1] != 2) continue;               /* not in the round */
-        if (pl[2] >= 1 && pl[2] < 7) pl[2] = 7;
-        if (pl[3] >= 1 && pl[3] < 7) pl[3] = 7;
-    }
-}
+static int g_noLifeDec;                 /* legacy [view] nolifedec            */
+static int g_lifeDecState;              /* 1 when the life cheat is active     */
+static void cheatApply(void);
 
 static void (__cdecl *g_chunkOrig)(void *list);
 static volatile LONG g_chunkState;      /* 0 off, 1 hooked, 2 wrong bytes, 3 denied */
@@ -2252,7 +2209,7 @@ static void __attribute__((force_align_arg_pointer)) __cdecl worldThunk(void)
     exactFrameClear();
     g_passStage = 1;
     g_farListLive = NULL;               /* per frame; the hook refills it */
-    lifeDecApply();                     /* nolifedec: top the counter up   */
+    cheatApply();
     QueryPerformanceCounter(&t0);
     g_worldOrig();
     QueryPerformanceCounter(&t1);
@@ -7205,7 +7162,7 @@ static DWORD __stdcall wrap_flush(void *arg)
             g_skyHi      = cfgInt("skyhi", 3000);
             g_skyDist    = cfgInt("skydist", 16000);
             g_noLifeDec  = cfgInt("nolifedec", 0);
-            lifeDecApply();
+            cheatApply();
             g_cityBack   = cfgInt("cityback", 0);
             g_nearOwn    = (float)cfgNum("nearown", 800);
             if (g_hudSpread < 20) g_hudSpread = 20;
@@ -7568,6 +7525,8 @@ static int   g_joySrc     = 0;   /* 0: proximity tracker, 1: player crosshair */
 static int   g_joyHooked  = 0;
 static BYTE *g_exeBase    = NULL;
 static int   g_euLayout   = 0;
+static int   g_euCheats   = 0;
+static BYTE  g_lifeTarget[2];
 
 #define EXE_RVA(a) (g_exeBase + ((a) - 0x00400000u))
 
@@ -7590,6 +7549,69 @@ static int gameHasEuLayout(void)
            !memcmp(base + 0x32B12, centre, sizeof(centre)) &&
            !memcmp(base + 0x0D300, player, sizeof(player)) &&
            !memcmp(base + 0x0D317, player2, sizeof(player2));
+}
+
+static int cheatSig(const BYTE *base, DWORD va, const BYTE *sig, SIZE_T n)
+{
+    const BYTE *at = base + (va - 0x00400000u);
+    return !IsBadReadPtr(at, n) && !memcmp(at, sig, n);
+}
+
+static int gameHasEuCheats(void)
+{
+    const BYTE *base = (const BYTE *)GetModuleHandleA(NULL);
+    static const BYTE player1[] = { 0xC7,0x05,0xCC,0xF1,0x4C,0x00,0xF0,0xB8,0x52,0x00 };
+    static const BYTE player2[] = { 0xC7,0x05,0x10,0xF2,0x4C,0x00,0x40,0xB9,0x52,0x00 };
+    static const BYTE damage[]  = { 0xFE,0xC9,0x88,0x48,0x02 };
+    static const BYTE ammoInit[]= { 0x66,0x89,0x4E,0x28 };
+    static const BYTE ammoShot[]= { 0x66,0xFF,0x0D,0x18,0xB9,0x52,0x00 };
+    static const BYTE capacity[]= { 6,15,24,30,6,6,99 };
+    return g_euLayout && base &&
+           cheatSig(base, 0x0042529Au, player1, sizeof(player1)) &&
+           cheatSig(base, 0x004252BEu, player2, sizeof(player2)) &&
+           cheatSig(base, 0x004168D1u, damage, sizeof(damage)) &&
+           cheatSig(base, 0x0040D217u, ammoInit, sizeof(ammoInit)) &&
+           cheatSig(base, 0x00416F61u, ammoShot, sizeof(ammoShot)) &&
+           cheatSig(base, 0x00459500u, capacity, sizeof(capacity));
+}
+
+static void cheatApply(void)
+{
+    BYTE *base = (BYTE *)GetModuleHandleA(NULL);
+    unsigned requested = 0, active;
+    int p;
+    if (g_share && GetTickCount() - g_share->cheat_heartbeat <= 700)
+        requested = g_share->cheat_flags & (VC2_CHEAT_AMMO | VC2_CHEAT_LIVES);
+    active = requested | (g_noLifeDec ? VC2_CHEAT_LIVES : 0);
+    if (g_share)
+        g_share->cheat_status = requested ?
+            (g_euCheats ? requested : VC2_CHEAT_UNSUPPORTED) : 0;
+    g_lifeDecState = g_euCheats && (active & VC2_CHEAT_LIVES) ? 1 : 0;
+    if (!g_euCheats || !base || !active) {
+        g_lifeTarget[0] = g_lifeTarget[1] = 0;
+        return;
+    }
+    for (p = 0; p < 2; p++) {
+        BYTE *player = base + 0x0CF1C0u + p * 0x44;
+        BYTE *gun = base + 0x12B8F0u + p * 0x50;
+        if (player[1] != 2) { g_lifeTarget[p] = 0; continue; }
+        if (active & VC2_CHEAT_AMMO) {
+            unsigned kind = gun[0x3A];
+            if (kind < 7) {
+                WORD *rounds = (WORD *)(gun + 0x28);
+                BYTE capacity = base[0x059500u + kind];
+                if (*rounds <= capacity) *rounds = capacity;
+            }
+        }
+        if (active & VC2_CHEAT_LIVES) {
+            BYTE lives = player[2];
+            if (lives >= 1 && lives <= 9) {
+                if (lives > g_lifeTarget[p]) g_lifeTarget[p] = lives;
+                if (g_lifeTarget[p] < 2) g_lifeTarget[p] = 2;
+                player[2] = g_lifeTarget[p];
+            }
+        } else g_lifeTarget[p] = 0;
+    }
 }
 
 /* Tested EU/PAL build: player crosshair sprites, 1361..1368 and 1369..1376.
@@ -7652,6 +7674,7 @@ static UINT WINAPI hookJoyGetPosEx(UINT id, JOYINFOEX_VC *pji)
     int stale, hidx = (id == 1) ? 1 : 0;
 
     if (!pji) return 0;
+    cheatApply();
 
     /* pin the game's calibration so our absolute map holds regardless of what
      * it read at startup (these are the game's own globals, we are in-process) */
@@ -8700,6 +8723,7 @@ static BOOL init(void)
 
     if (g_target) return TRUE;
     g_euLayout = gameHasEuLayout();
+    g_euCheats = gameHasEuCheats();
     /* This game build keeps our callbacks after freeing the renderer DLL. */
     if (g_euLayout && !GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
                                           GET_MODULE_HANDLE_EX_FLAG_PIN,
@@ -8771,6 +8795,9 @@ static BOOL init(void)
             g_share->seq = 0;
             g_share->frame = 0;
             g_share->vertex_count = 0;
+            g_share->cheat_flags = 0;
+            g_share->cheat_heartbeat = 0;
+            g_share->cheat_status = 0;
         }
     }
     half = fovDeg * 3.14159265358979 / 360.0;
@@ -8868,7 +8895,7 @@ static BOOL init(void)
     g_skyHi    = (int)cfgNum("skyhi", 3000);
     g_skyDist  = (int)cfgNum("skydist", 16000);
     g_noLifeDec = (int)cfgNum("nolifedec", 0);
-    lifeDecApply();
+    cheatApply();
     if (g_passOn && !g_excHooked) {
         g_excHooked = 1;
         AddVectoredExceptionHandler(1, passExcHandler);
