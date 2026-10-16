@@ -186,6 +186,7 @@ static char g_cfgGameExe[MAX_PATH];   /* [vr] gameexe: start the game ourselves 
 static int  g_cfgSetDevice = 1;       /* [vr] setdevice: write vcop2.ini for them */
 static int g_cfgNoPause = 1;      /* patch the game so losing focus does not pause it */
 static int g_cfgNoCd = 0;         /* [vr] launchfix: in-memory compatibility patches at launch */
+static unsigned g_cheatFlags;     /* per-launch cheats; off unless requested */
 static int g_cfgScope;            /* 1 = optic on the gun, 0 = magnify the whole view */
 static int g_cfgScopeDeg = 12;    /* angular radius of the disc, degrees */
 static int g_cfgScopeDist = 25;   /* how far out the head-locked disc hangs, m */
@@ -293,6 +294,28 @@ static int pullFrame(void)
 {
     unsigned a, b, n, i;
     if (!g_frame) return 0;
+    if (g_cheatFlags && g_frame->version == VC2_SHARE_VERSION) {
+        static DWORD firstSent;
+        static int reported;
+        DWORD now = GetTickCount();
+        unsigned status;
+        g_frame->cheat_flags = g_cheatFlags;
+        MemoryBarrier();
+        g_frame->cheat_heartbeat = now;
+        if (!firstSent) firstSent = now;
+        status = g_frame->cheat_status;
+        if (!reported && status == VC2_CHEAT_UNSUPPORTED) {
+            note("cheats: unsupported game executable; no counters changed\n");
+            reported = 1;
+        } else if (!reported && (status & g_cheatFlags) == g_cheatFlags) {
+            note("cheats: ready (ammo %u, lives %u)\n",
+                 !!(g_cheatFlags & VC2_CHEAT_AMMO), !!(g_cheatFlags & VC2_CHEAT_LIVES));
+            reported = 1;
+        } else if (!reported && now - firstSent > 2000) {
+            note("cheats: no response from HGL_VIEW.DLL; update both mod binaries\n");
+            reported = 1;
+        }
+    }
     for (i = 0; i < 8; i++) {
         a = g_frame->seq;
         if (a & 1u) continue;
@@ -2853,8 +2876,8 @@ static int handleControllers(XrSession session, XrSpace space, XrTime when,
         unsigned buttons2 = 0;
         g_frame->akimbo = 1;
         if (fire[oh].isActive && fire[oh].currentState) buttons2 |= VC2_BTN_FIRE;
-        /* PLAYER 2 HAS TO PRESS START HIMSELF. 0x0040D300 only draws the second
-         * crosshair when byte [0x004CF1E5] == 2 - "player 2 is in the game" -
+        /* PLAYER 2 HAS TO PRESS START HIMSELF. The game only draws the second
+         * crosshair when its player state is 2 - "player 2 is in the game" -
          * and nothing sets that until P2's own Start arrives on his own device.
          * Gun 2 used to be trigger-only "so its thumb does not fight the menus",
          * which is precisely why akimbo never started: the second player was
@@ -3746,6 +3769,8 @@ int main(int argc, char **argv)
     for (i = 1; i < argc; i++) {
         if (!lstrcmpiA(argv[i], "--window")) wantWindow = 1;
         if (!lstrcmpiA(argv[i], "--stereo")) wantStereo = 1;
+        if (!lstrcmpiA(argv[i], "--infinite-ammo")) g_cheatFlags |= VC2_CHEAT_AMMO;
+        if (!lstrcmpiA(argv[i], "--infinite-lives")) g_cheatFlags |= VC2_CHEAT_LIVES;
     }
 
     loadCfg();

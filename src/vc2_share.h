@@ -40,9 +40,14 @@
 #ifndef VC2_SHARE_H
 #define VC2_SHARE_H
 
+#include <stddef.h>
+
 #define VC2_SHARE_NAME    "Local\\VirtuaCop2_VR_Frame"
 #define VC2_SHARE_MAGIC   0x32504356u      /* 'VCP2' */
 #define VC2_SHARE_VERSION 8
+#define VC2_CHEAT_AMMO    1u
+#define VC2_CHEAT_LIVES   2u
+#define VC2_CHEAT_UNSUPPORTED 0x80000000u
 #define VC2_MAX_VERTS     (40000 * 6)      /* the world cache holds a city */
 
 /* the capture buffer holds up to this; the actual captured size travels in
@@ -98,7 +103,8 @@ typedef struct {
     volatile unsigned int aim2_seq;
     float        aim2_x, aim2_y;
     unsigned int aim2_buttons;
-    unsigned int reserved[4];
+    unsigned int reserved[3];
+    volatile unsigned int cheat_flags;  /* VR -> game; optional, layout unchanged */
 
     /* written by the VR side, read by the game side: where the controller is
      * pointing, in the game's own 640x480 screen space, for the light gun.
@@ -120,7 +126,8 @@ typedef struct {
 
     volatile unsigned int atlas_seq;
     unsigned int atlas_frame;              /* bumps when the sheet changed */
-    unsigned int atlas_pad[2];
+    volatile unsigned int cheat_heartbeat; /* VR -> game; GetTickCount() */
+    volatile unsigned int cheat_status;    /* game -> VR; flags or unsupported */
 
     Vc2Vertex    verts[VC2_MAX_VERTS];
     unsigned int screen[VC2_SCREEN_MAX_W * VC2_SCREEN_MAX_H]; /* BGRA, top-down */
@@ -128,5 +135,10 @@ typedef struct {
 } Vc2Frame;
 
 #pragma pack(pop)
+
+_Static_assert(sizeof(Vc2Frame) == 78744184, "shared memory layout changed");
+_Static_assert(offsetof(Vc2Frame, cheat_flags) == 60, "cheat request offset changed");
+_Static_assert(offsetof(Vc2Frame, cheat_heartbeat) == 112, "cheat heartbeat offset changed");
+_Static_assert(offsetof(Vc2Frame, cheat_status) == 116, "cheat status offset changed");
 
 #endif

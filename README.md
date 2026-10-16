@@ -45,6 +45,16 @@ mod in there too, and run everything from `PROJECT`.
 `VC2VR.exe --window` renders to a flat window instead of the headset, which
 tells a game-side problem from a VR-runtime one.
 
+## Optional cheats
+
+Pass `--infinite-ammo`, `--infinite-lives`, or both to `VC2VR.exe`. A launcher
+can pass the same flags. Both players are covered; cheats stop when VC2VR exits.
+They are off by default and change only the running game's memory.
+
+These flags work only with the verified EU/PAL `PPJ2DD.EXE` below. The console
+reports whether cheats are ready or the game is unsupported. Update
+`VC2VR.exe` and `HGL_VIEW.DLL` together for this feature.
+
 ## Controls
 
 | Input                 | Action                                            |
@@ -71,6 +81,12 @@ player 2, aiming by the game's own crosshair on that window. Set
 `VC2VR.ini` - VR side: picture quality, zoom, gun model, akimbo.
 `HGL_VIEW.ini` - game side: world scale (`units_per_metre`), 360-degree
 machinery, HUD. Both files are short and commented.
+
+The EU/PAL `PPJ2DD.EXE` tested with SHA256
+`1AA51AC02F8612FA8367D3DE8D6926DE23F77B7D4FA83BB771E71D46151A2623`
+uses different light-gun and player-state offsets. The DLL selects those offsets
+only when four instructions in the running game match; other executables keep
+the original input path.
 
 ## Rendering glitches
 

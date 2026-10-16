@@ -278,7 +278,7 @@ static float    g_sprFar  = 90000.0f;   /* and how far the sky sits behind  */
 #define XHAIR_CAND 32
 static volatile float g_candX[XHAIR_CAND], g_candY[XHAIR_CAND];
 static volatile DWORD g_candT[XHAIR_CAND];
-static volatile DWORD g_candTex[XHAIR_CAND];   /* texture id, for the log */
+static volatile DWORD g_candTex[XHAIR_CAND];   /* texture id, for aim and log */
 static volatile LONG  g_candW = 0;
 static float          g_xhairEst = 320.0f, g_xhairEstY = 240.0f;  /* tracked lock, gun 0 */
 static float          g_xhairEst2 = 320.0f, g_xhairEstY2 = 240.0f; /* tracked lock, gun 1 */
@@ -2066,52 +2066,9 @@ static void __attribute__((force_align_arg_pointer)) __cdecl camThunk(void *cam)
  * wrap_quad). The far chunk is where the tall harbour structures live -
  * the wedges by the ship are the scraps of them that leaked in through the
  * near lists. */
-/* ---- nolifedec: the player cannot die while a probe run is on ----
- * The damage handler (0x0040CE08) takes one word off the player's lives at
- * two sites - 0x0040CE7D and 0x0040CEC4, both "66 FF 4E 28", dec word
- * [esi+0x28] - and calls the death path when the word goes to zero. Found by
- * a two-snapshot diff on a deliberate hit: the live counter is word
- * 0x0052B948 (display copies at 0x004CF1A2/A3). NOPing the two decs keeps
- * every other part of a hit - the flash, the sound, the invulnerability
- * window at [esi+0x2e] - and only the counter stands still. Live key, both
- * directions: 1 patches, 0 puts the original bytes back. For working, not
- * for playing. */
-static int g_noLifeDec;                 /* [view] nolifedec                     */
-static int g_lifeDecState;              /* 0 original, 1 patched, 2 hands off   */
-
-/* Session 25 learnt the hard way that there is not ONE decrement: the
- * handler at 0x40CE08 carries three (0x40CB7C, 0x40CE7D, 0x40CEC4, 0x40CFEE
- * across its neighbours) and a fifth lives at 0x416F81 as a direct
- * dec word [0x52B8F8] - and the ordinary bullet hit went through a site the
- * first build had not patched. All five now, each verified byte for byte
- * before touching, and on top of that a once-a-second top-up of both lives
- * words back to 7 while the key is on - so even a sixth site nobody has
- * found yet cannot kill the player between two seconds. */
-static void lifeDecApply(void)
-{
-    /* Session 25, third try, and this time from evidence rather than from a
-     * disassembly hunch. The five "dec" sites the earlier builds NOPed
-     * (0x40CB7C.. and dec word [0x52B8F8]) belong to the AMMUNITION: the
-     * word 0x52B8F8 read 6 while the HUD showed seven lives, both before
-     * and after the deliberate hit. The only cells in the scanned data
-     * segment that actually followed that hit (7 -> 6, live, on the
-     * player's own screen) are the bytes at 0x4CF1A2/A3 - fields +2/+3 of
-     * the player block at 0x4CF1A0 (stride 0x44, player 2 at 0x4CF1E4).
-     * So no code is patched at all any more: while nolifedec is on, the
-     * counter is simply written back to 7 every world frame, for a player
-     * whose state byte (+1 == 2) says he is in the round. A hit still
-     * flashes and still shoves the camera; the byte recovers within a
-     * frame, and the death branch never sees a zero. */
-    BYTE *pl;
-    if (!g_noLifeDec) { g_lifeDecState = 0; return; }
-    g_lifeDecState = 1;
-    for (pl = (BYTE *)0x004CF1A0; pl <= (BYTE *)0x004CF1E4; pl += 0x44) {
-        if (IsBadReadPtr(pl, 4) || IsBadWritePtr(pl, 4)) continue;
-        if (pl[1] != 2) continue;               /* not in the round */
-        if (pl[2] >= 1 && pl[2] < 7) pl[2] = 7;
-        if (pl[3] >= 1 && pl[3] < 7) pl[3] = 7;
-    }
-}
+static int g_noLifeDec;                 /* legacy [view] nolifedec            */
+static int g_lifeDecState;              /* 1 when the life cheat is active     */
+static void cheatApply(void);
 
 static void (__cdecl *g_chunkOrig)(void *list);
 static volatile LONG g_chunkState;      /* 0 off, 1 hooked, 2 wrong bytes, 3 denied */
@@ -2252,7 +2209,7 @@ static void __attribute__((force_align_arg_pointer)) __cdecl worldThunk(void)
     exactFrameClear();
     g_passStage = 1;
     g_farListLive = NULL;               /* per frame; the hook refills it */
-    lifeDecApply();                     /* nolifedec: top the counter up   */
+    cheatApply();
     QueryPerformanceCounter(&t0);
     g_worldOrig();
     QueryPerformanceCounter(&t1);
@@ -7205,7 +7162,7 @@ static DWORD __stdcall wrap_flush(void *arg)
             g_skyHi      = cfgInt("skyhi", 3000);
             g_skyDist    = cfgInt("skydist", 16000);
             g_noLifeDec  = cfgInt("nolifedec", 0);
-            lifeDecApply();
+            cheatApply();
             g_cityBack   = cfgInt("cityback", 0);
             g_nearOwn    = (float)cfgNum("nearown", 800);
             if (g_hudSpread < 20) g_hudSpread = 20;
@@ -7534,8 +7491,8 @@ static BOOL CALLBACK findOurWindow(HWND h, LPARAM out)
  * 0x00432E4C decode):
  *
  *     dwXpos/dwYpos live in JOYINFOEX at +0x08/+0x0C, dwButtons at +0x20
- *     deltaX = (dwXpos - centerX[joy]) >> 8            centerX at 0x004CEE50
- *     deltaY = (dwYpos - centerY[joy]) >> 8            centerY at 0x004CEE48
+ *     deltaX = (dwXpos - centerX[joy]) >> 8            EU centerX 0x004CEE70
+ *     deltaY = (dwYpos - centerY[joy]) >> 8            EU centerY 0x004CEE68
  *     dead zone +-0x10, then *sensitivity (0x004D4263), clamp +-128, +0x7F
  *       -> a 0..255 gun DELTA, 0x7F = no movement
  *     trigger = bit (1 << button_index[joy]) in dwButtons, gun table 0x004D4260
@@ -7545,9 +7502,8 @@ static BOOL CALLBACK findOurWindow(HWND h, LPARAM out)
  * DLLs), so the analog gun is relative by nature - a straight absolute map
  * only drifts. joymode=1 therefore closes a loop over the game's own
  * crosshair: feed a velocity toward the VR aim point and the crosshair
- * settles on the laser point. Where the crosshair is comes either from its
- * priority-0 sprite (joysrc=0, pushSprite) or from the controller block
- * itself (joysrc=1, xhairFromGame).
+ * settles on the laser point. joysrc=1 reads the game layout's player
+ * crosshair; joysrc=0 uses the older proximity tracker.
  *
  * At init (0x00433340) the poll must return JOYERR_NOERROR and joyGetDevCapsA
  * must succeed; szOEMVxD == "segajoy.vxd" flips the game into the SEGA VxD
@@ -7565,55 +7521,136 @@ static LONG  g_joyFireBit = 0;   /* dwButtons bit for trigger if game table 0 */
 static LONG  g_joyStartBit= 1;   /* dwButtons bit for START (A/X)             */
 static LONG  g_joyBackBit  = 2;  /* dwButtons bit for BACK  (B/Y)             */
 static int   g_joyInvertY = 0;   /* flip Y if the gun aims upside down        */
-static int   g_joySrc     = 0;   /* 0: track the prio-0 sprite, 1: read the
-                                  * crosshair straight out of the game's
-                                  * controller block (see xhairFromGame)      */
+static int   g_joySrc     = 0;   /* 0: proximity tracker, 1: player crosshair */
 static int   g_joyHooked  = 0;
 static BYTE *g_exeBase    = NULL;
+static int   g_euLayout   = 0;
+static int   g_euCheats   = 0;
+static BYTE  g_lifeTarget[2];
 
 #define EXE_RVA(a) (g_exeBase + ((a) - 0x00400000u))
 
-/* The crosshair position without sprite tracking. PPJ2DD keeps a 0x50-byte
- * controller block per player - 0x0052B8D0 (P0), 0x0052B920 (P1), pushed as
- * such at 0x0040BF58/0x0040BF65 - and a player record at 0x004CF1A0 + p*0x44
- * whose byte +1 is 2 while that player is in the game and whose dword +0x0C
- * points at the block. The velocity from the joystick record lands in the
- * block at +0x20/+0x22 (0x0040C210) and the integrator 0x0040C480 turns it
- * into a position at +0x14/+0x16: signed words, cell*8 - 0xA8 + fine for x
- * and cell*8 - 0x70 + fine for y, i.e. a 352x240 space centred on 0. The
- * sprite itself is drawn by 0x0040D330 through 0x00444390 (flags branch
- * 0x00444521), which puts its centre at
- *     sx = cx + x * W / 352        cx = int16 0x004CF80A, W = float 0x0052B8AC
- *     sy = cy + y * H / 240        cy = int16 0x004CF808, H = float 0x0052B8B0
- * (1/352 and 1/240 are the constants at 0x0044DE70/0x0044DE74, W/H are the
- * render size the game got from HGL at 0x0040A5E2). That is exactly the
- * sprite centre pushSprite sees, so the two sources are interchangeable.
- * The descriptor table 0x00459510 pins the textures: P0 draws 1360, P1 1344.
- * Returns 1 and the centre in sprite space when player p is in the game. */
+/* Only use the alternate offsets after matching the game's actual instructions.
+ * Unknown executables retain the original joystick behavior. */
+static int gameHasEuLayout(void)
+{
+    const BYTE *base = (const BYTE *)GetModuleHandleA(NULL);
+    static const BYTE selector[] = { 0x8B,0x04,0xBD,0xB8,0xF8,0x48,0x00 };
+    static const BYTE centre[]   = { 0x8B,0x88,0x70,0xEE,0x4C,0x00,
+                                     0x8B,0x90,0x68,0xEE,0x4C,0x00 };
+    static const BYTE player[]   = { 0xA0,0xC1,0xF1,0x4C,0x00,0x3C,0x02 };
+    static const BYTE player2[]  = { 0xA0,0x05,0xF2,0x4C,0x00,0x3C,0x02 };
+    return base &&
+           !IsBadReadPtr(base + 0x32861, sizeof(selector)) &&
+           !IsBadReadPtr(base + 0x32B12, sizeof(centre)) &&
+           !IsBadReadPtr(base + 0x0D300, sizeof(player)) &&
+           !IsBadReadPtr(base + 0x0D317, sizeof(player2)) &&
+           !memcmp(base + 0x32861, selector, sizeof(selector)) &&
+           !memcmp(base + 0x32B12, centre, sizeof(centre)) &&
+           !memcmp(base + 0x0D300, player, sizeof(player)) &&
+           !memcmp(base + 0x0D317, player2, sizeof(player2));
+}
+
+static int cheatSig(const BYTE *base, DWORD va, const BYTE *sig, SIZE_T n)
+{
+    const BYTE *at = base + (va - 0x00400000u);
+    return !IsBadReadPtr(at, n) && !memcmp(at, sig, n);
+}
+
+static int gameHasEuCheats(void)
+{
+    const BYTE *base = (const BYTE *)GetModuleHandleA(NULL);
+    static const BYTE player1[] = { 0xC7,0x05,0xCC,0xF1,0x4C,0x00,0xF0,0xB8,0x52,0x00 };
+    static const BYTE player2[] = { 0xC7,0x05,0x10,0xF2,0x4C,0x00,0x40,0xB9,0x52,0x00 };
+    static const BYTE damage[]  = { 0xFE,0xC9,0x88,0x48,0x02 };
+    static const BYTE ammoInit[]= { 0x66,0x89,0x4E,0x28 };
+    static const BYTE ammoShot[]= { 0x66,0xFF,0x0D,0x18,0xB9,0x52,0x00 };
+    static const BYTE capacity[]= { 6,15,24,30,6,6,99 };
+    return g_euLayout && base &&
+           cheatSig(base, 0x0042529Au, player1, sizeof(player1)) &&
+           cheatSig(base, 0x004252BEu, player2, sizeof(player2)) &&
+           cheatSig(base, 0x004168D1u, damage, sizeof(damage)) &&
+           cheatSig(base, 0x0040D217u, ammoInit, sizeof(ammoInit)) &&
+           cheatSig(base, 0x00416F61u, ammoShot, sizeof(ammoShot)) &&
+           cheatSig(base, 0x00459500u, capacity, sizeof(capacity));
+}
+
+static void cheatApply(void)
+{
+    BYTE *base = (BYTE *)GetModuleHandleA(NULL);
+    unsigned requested = 0, active;
+    int p;
+    if (g_share && GetTickCount() - g_share->cheat_heartbeat <= 700)
+        requested = g_share->cheat_flags & (VC2_CHEAT_AMMO | VC2_CHEAT_LIVES);
+    active = requested | (g_noLifeDec ? VC2_CHEAT_LIVES : 0);
+    if (g_share)
+        g_share->cheat_status = requested ?
+            (g_euCheats ? requested : VC2_CHEAT_UNSUPPORTED) : 0;
+    g_lifeDecState = g_euCheats && (active & VC2_CHEAT_LIVES) ? 1 : 0;
+    if (!g_euCheats || !base || !active) {
+        g_lifeTarget[0] = g_lifeTarget[1] = 0;
+        return;
+    }
+    for (p = 0; p < 2; p++) {
+        BYTE *player = base + 0x0CF1C0u + p * 0x44;
+        BYTE *gun = base + 0x12B8F0u + p * 0x50;
+        if (player[1] != 2) { g_lifeTarget[p] = 0; continue; }
+        if (active & VC2_CHEAT_AMMO) {
+            unsigned kind = gun[0x3A];
+            if (kind < 7) {
+                WORD *rounds = (WORD *)(gun + 0x28);
+                BYTE capacity = base[0x059500u + kind];
+                if (*rounds <= capacity) *rounds = capacity;
+            }
+        }
+        if (active & VC2_CHEAT_LIVES) {
+            BYTE lives = player[2];
+            if (lives >= 1 && lives <= 9) {
+                if (lives > g_lifeTarget[p]) g_lifeTarget[p] = lives;
+                if (g_lifeTarget[p] < 2) g_lifeTarget[p] = 2;
+                player[2] = g_lifeTarget[p];
+            }
+        } else g_lifeTarget[p] = 0;
+    }
+}
+
+/* Tested EU/PAL build: player crosshair sprites, 1361..1368 and 1369..1376.
+ * Unmatched layouts keep the original controller-block calculation. */
 static int xhairFromGame(int p, float *sx, float *sy)
 {
-    const BYTE  *rec;
-    const BYTE  *ctrl;
-    const BYTE  *fallback;
-    float w, h;
-    short cx, cy, x, y;
     if (!g_exeBase || p < 0 || p > 1) return 0;
-    rec      = EXE_RVA(0x004CF1A0) + p * 0x44;
-    fallback = EXE_RVA(p ? 0x0052B920 : 0x0052B8D0);
-    if (IsBadReadPtr(rec, 0x44)) return 0;
-    if (rec[1] != 2) return 0;                    /* not playing right now */
-    ctrl = *(const BYTE * const *)(rec + 0x0C);
-    if (!ctrl || IsBadReadPtr(ctrl, 0x50)) ctrl = fallback;
-    w  = *(const float *)EXE_RVA(0x0052B8AC);
-    h  = *(const float *)EXE_RVA(0x0052B8B0);
-    cx = *(const short *)EXE_RVA(0x004CF80A);
-    cy = *(const short *)EXE_RVA(0x004CF808);
-    if (!(w > 1.0f && w < 8192.0f) || !(h > 1.0f && h < 8192.0f)) return 0;
-    x = *(const short *)(ctrl + 0x14);
-    y = *(const short *)(ctrl + 0x16);
-    *sx = (float)cx + (float)x * (w / 352.0f);
-    *sy = (float)cy + (float)y * (h / 240.0f);
-    return 1;
+    if (g_euLayout) {
+        DWORD now = GetTickCount(), bestAge = 80;
+        unsigned lo = p ? 1369 : 1361;
+        int i;
+        if (*(const BYTE *)EXE_RVA(0x004CF1C1 + p * 0x44) != 2) return 0;
+        for (i = 0; i < XHAIR_CAND; i++) {
+            DWORD age = now - g_candT[i];
+            if (age < bestAge && g_candTex[i] >= lo && g_candTex[i] <= lo + 7) {
+                bestAge = age;
+                *sx = g_candX[i]; *sy = g_candY[i];
+            }
+        }
+        return bestAge < 80;
+    } else {
+        const BYTE *rec = EXE_RVA(0x004CF1A0) + p * 0x44;
+        const BYTE *ctrl, *fallback = EXE_RVA(p ? 0x0052B920 : 0x0052B8D0);
+        float w, h;
+        short cx, cy, x, y;
+        if (IsBadReadPtr(rec, 0x44) || rec[1] != 2) return 0;
+        ctrl = *(const BYTE * const *)(rec + 0x0C);
+        if (!ctrl || IsBadReadPtr(ctrl, 0x50)) ctrl = fallback;
+        w  = *(const float *)EXE_RVA(0x0052B8AC);
+        h  = *(const float *)EXE_RVA(0x0052B8B0);
+        cx = *(const short *)EXE_RVA(0x004CF80A);
+        cy = *(const short *)EXE_RVA(0x004CF808);
+        if (!(w > 1.0f && w < 8192.0f) || !(h > 1.0f && h < 8192.0f)) return 0;
+        x = *(const short *)(ctrl + 0x14);
+        y = *(const short *)(ctrl + 0x16);
+        *sx = (float)cx + (float)x * (w / 352.0f);
+        *sy = (float)cy + (float)y * (h / 240.0f);
+        return 1;
+    }
 }
 
 /* WinMM ABI - 13 dwords = 0x34, matches the game's dwSize and field reads */
@@ -7637,28 +7674,29 @@ static UINT WINAPI hookJoyGetPosEx(UINT id, JOYINFOEX_VC *pji)
     int stale, hidx = (id == 1) ? 1 : 0;
 
     if (!pji) return 0;
+    cheatApply();
 
     /* pin the game's calibration so our absolute map holds regardless of what
      * it read at startup (these are the game's own globals, we are in-process) */
-    if (g_exeBase && id < 4) {
-        *(DWORD *)(EXE_RVA(0x004CEE50) + id * 4) = 0x8000;   /* centerX */
-        *(DWORD *)(EXE_RVA(0x004CEE48) + id * 4) = 0x8000;   /* centerY */
+    if (g_exeBase && id < (g_euLayout ? 2u : 4u)) {
+        *(DWORD *)(EXE_RVA(g_euLayout ? 0x004CEE70 : 0x004CEE50) + id * 4) = 0x8000;
+        *(DWORD *)(EXE_RVA(g_euLayout ? 0x004CEE68 : 0x004CEE48) + id * 4) = 0x8000;
         *(BYTE  *)(EXE_RVA(0x004D4263) + id * 4) = 2;        /* identity sens */
     }
     /* the VR side declares two guns by setting share->akimbo; honour it only if
      * the ini also allows it. Recomputed each poll so it tracks the app. */
     g_akimboOn = (g_akimbo && g_share && g_share->akimbo);
 
-    /* force the analog-gun handler (device-type selector [0x0048F8A0 + p*4];
+    /* force the analog-gun handler (EU selector [0x0048F8B8 + p*4];
      * value 3 = analog gun uJoyID 0, 4 = analog gun uJoyID 1, 5 = digital,
      * 1 = keyboard). The config menu writes this, so re-assert it every poll.
      * Without it the crosshair sits still because a digital handler quantises
      * the axis to 3 zones. Player 0 is always type 3; player 1 only exists in
      * akimbo, and must be type 4 so the game reads it as joystick id 1. */
     if (g_exeBase && g_joyForce) {
-        *(DWORD *)EXE_RVA(0x0048F8A0) = 3;
+        *(DWORD *)EXE_RVA(g_euLayout ? 0x0048F8B8 : 0x0048F8A0) = 3;
         if (g_akimboOn)
-            *(DWORD *)EXE_RVA(0x0048F8A4) = 4;
+            *(DWORD *)EXE_RVA(g_euLayout ? 0x0048F8BC : 0x0048F8A4) = 4;
     }
 
     seq = !g_share ? 0
@@ -7696,11 +7734,7 @@ static UINT WINAPI hookJoyGetPosEx(UINT id, JOYINFOEX_VC *pji)
         float memX = 0, memY = 0;
         int   memOk = xhairFromGame(gun, &memX, &memY);
 
-        /* joysrc=1: the crosshair comes straight from the game's controller
-         * block, one per player, so there is nothing to disambiguate - the
-         * two akimbo crosshairs cannot swap and a static HUD sprite at
-         * priority 0 cannot steal the lock. joysrc=0 is the sprite tracker
-         * below, unchanged. */
+        /* joysrc=1: use the matched game's player crosshair. */
         if (g_joySrc == 1) {
             if (memOk) { *estX = memX; *estY = memY; fresh = 1; }
             g_xhairX = *estX; g_xhairY = *estY;
@@ -7728,8 +7762,8 @@ static UINT WINAPI hookJoyGetPosEx(UINT id, JOYINFOEX_VC *pji)
              * after P2 joined (only P1's sprites were in the ring yet), and
              * "keep the lock if a candidate is within 200 px" then never let
              * go. Player 2 spent the round driving player 1's crosshair.
-             * The controller block cannot be confused this way: there is one
-             * per player. Use it to anchor, and to break a lock that has
+         * Player-specific feedback cannot be confused this way. Use it to
+         * anchor, and to break a lock that has
              * wandered onto somebody else's sprite. */
             if (memOk) {
                 float dx = *estX - memX, dy = *estY - memY;
@@ -7766,7 +7800,7 @@ static UINT WINAPI hookJoyGetPosEx(UINT id, JOYINFOEX_VC *pji)
             Y = 0x8000 + dyi * 256;
         } else {
             /* NO LIVE CROSSHAIR. That is not an error state, it is the MENU:
-             * outside a round [0x004CF1A0+1] is 1, not 2, no crosshair exists
+             * outside a round the player state is 1, not 2; no crosshair exists
              * and there is nothing to close a loop around.
              *
              * 0x00410C10 says exactly what the menu wants. It takes the
@@ -7817,13 +7851,10 @@ static UINT WINAPI hookJoyGetPosEx(UINT id, JOYINFOEX_VC *pji)
             DWORD btnsLog = gun ? g_share->aim2_buttons : g_share->aim_buttons;
             if (now - lastLog[gun] > 100) {
                 char b[512], c[160]; DWORD w; HANDLE h;
-                DWORD devtype = g_exeBase ? *(DWORD *)EXE_RVA(0x0048F8A0) : 0;
+                DWORD devtype = g_exeBase ? *(DWORD *)EXE_RVA(g_euLayout ? 0x0048F8B8 : 0x0048F8A0) : 0;
                 int   n = 0, cl = 0;
                 lastLog[gun] = now;
-                /* every fresh prio-0 candidate as tex@x,y - with joysrc=0 this
-                 * is what the tracker chose from, with joysrc=1 it is the
-                 * cross-check: mem=(..) must sit on the 1360 (P0) / 1344 (P1)
-                 * sprite centre */
+                /* every fresh prio-0 candidate as tex@x,y */
                 c[0] = 0;
                 for (i = 0; i < XHAIR_CAND && n < 6; i++) {
                     if (now - g_candT[i] >= 80) continue;
@@ -7832,18 +7863,17 @@ static UINT WINAPI hookJoyGetPosEx(UINT id, JOYINFOEX_VC *pji)
                     n++;
                     if (cl > 120) break;
                 }
-                /* in/in2 are the two "this player is in the game" bytes that
-                 * 0x0040D300 tests before it draws a crosshair at all
-                 * ([0x004CF1A1] and [0x004CF1E5], 2 = playing). If in2 never
+                /* in/in2 are the two "this player is in the game" bytes.
+                 * The EU build tests [0x004CF1C1] and [0x004CF205]. If in2 never
                  * reaches 2, akimbo cannot work whatever the aim code does:
                  * player two has not joined and there is no second crosshair
                  * to drive. dev2 is his device type, which must be 4. */
                 wsprintfA(b,
                     "t=%u src=%d id=%u dev=%u/%u in=%u/%u cand=%d hits=%d lock=(%d,%d) mem=%d(%d,%d) target=(%d,%d) fed=(%d,%d) btn=%u%s\r\n",
                     now, g_joySrc, id, devtype,
-                    (unsigned)(g_exeBase ? *(DWORD *)EXE_RVA(0x0048F8A4) : 0),
-                    (unsigned)(g_exeBase ? *(BYTE *)EXE_RVA(0x004CF1A1) : 0),
-                    (unsigned)(g_exeBase ? *(BYTE *)EXE_RVA(0x004CF1E5) : 0),
+                    (unsigned)(g_exeBase ? *(DWORD *)EXE_RVA(g_euLayout ? 0x0048F8BC : 0x0048F8A4) : 0),
+                    (unsigned)(g_exeBase ? *(BYTE *)EXE_RVA(g_euLayout ? 0x004CF1C1 : 0x004CF1A1) : 0),
+                    (unsigned)(g_exeBase ? *(BYTE *)EXE_RVA(g_euLayout ? 0x004CF205 : 0x004CF1E5) : 0),
                     ncand, (int)g_xhairHits,
                     (int)*estX, (int)*estY, memOk, (int)memX, (int)memY,
                     (int)tx, (int)ty,
@@ -7961,7 +7991,10 @@ static void installJoyHook(BYTE *base)
     if (joyPatchSlot(0x008074A4, (void *)hookJoyGetPosEx,   (void **)&g_realJoyPos) &&
         joyPatchSlot(0x008074A0, (void *)hookJoyGetDevCaps, (void **)&g_realJoyCaps))
         g_joyHooked = 1;
-    if (g_joyForce) *(DWORD *)EXE_RVA(0x0048F8A0) = 3;   /* analog gun, player 0 */
+    if (g_joyForce) {
+        *(DWORD *)EXE_RVA(g_euLayout ? 0x0048F8B8 : 0x0048F8A0) = 3;
+        if (g_euLayout && g_akimbo) *(DWORD *)EXE_RVA(0x0048F8BC) = 4;
+    }
     patchOnePlayer(base);
 }
 
@@ -8684,10 +8717,17 @@ static int cfgRanges(const char *key, IdRange *out, int max)
 static BOOL init(void)
 {
     char dir[MAX_PATH], path[MAX_PATH];
+    HMODULE pinned;
     int len;
     double fovDeg, half;
 
     if (g_target) return TRUE;
+    g_euLayout = gameHasEuLayout();
+    g_euCheats = gameHasEuCheats();
+    /* This game build keeps our callbacks after freeing the renderer DLL. */
+    if (g_euLayout && !GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                                          GET_MODULE_HANDLE_EX_FLAG_PIN,
+                                          (LPCSTR)(void *)&init, &pinned)) return FALSE;
 
     GetModuleFileNameA(g_self, dir, sizeof(dir));
     len = lstrlenA(dir);
@@ -8755,6 +8795,9 @@ static BOOL init(void)
             g_share->seq = 0;
             g_share->frame = 0;
             g_share->vertex_count = 0;
+            g_share->cheat_flags = 0;
+            g_share->cheat_heartbeat = 0;
+            g_share->cheat_status = 0;
         }
     }
     half = fovDeg * 3.14159265358979 / 360.0;
@@ -8852,7 +8895,7 @@ static BOOL init(void)
     g_skyHi    = (int)cfgNum("skyhi", 3000);
     g_skyDist  = (int)cfgNum("skydist", 16000);
     g_noLifeDec = (int)cfgNum("nolifedec", 0);
-    lifeDecApply();
+    cheatApply();
     if (g_passOn && !g_excHooked) {
         g_excHooked = 1;
         AddVectoredExceptionHandler(1, passExcHandler);
