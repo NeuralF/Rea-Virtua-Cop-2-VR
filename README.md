@@ -72,6 +72,11 @@ player 2, aiming by the game's own crosshair on that window. Set
 `HGL_VIEW.ini` - game side: world scale (`units_per_metre`), 360-degree
 machinery, HUD. Both files are short and commented.
 
+`launchfix = 1` optionally bypasses the game's CD check when `VC2VR.exe` starts
+a recognized `PPJ2DD.EXE`, including the EU/PAL 1.0.0.2 code layout. The patch
+is in memory only; starting `PPJ2DD.EXE` directly skips it. Leave this off when
+the disc is mounted, and keep the disc mounted for music.
+
 ## Rendering glitches
 
 The world is reconstructed from what a 1997 software renderer emits, not from
