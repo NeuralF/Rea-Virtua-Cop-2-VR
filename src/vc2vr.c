@@ -566,29 +566,52 @@ static void gameLaunch(void)
     if (CreateProcessA(g_cfgGameExe, NULL, NULL, NULL, FALSE, CREATE_SUSPENDED, NULL,
                        dir[0] ? dir : NULL, &si, &pi)) {
         note("launch: started %s\n", g_cfgGameExe);
-        /* The disc check, 0x0040E4B0. The stock exe looks for the CD before
-         * the first frame and, finding none, goes on into a state the
-         * renderer dies in (the title screen blit calls through a slot that
-         * was never filled). The well-known no-CD patch replaces the check
-         * with "mov [0x52B8B8], 2 ; mov eax, 1 ; ret" - sixteen bytes. Do
-         * the same in the suspended process, before its first instruction,
-         * and nothing on disk changes. Only when the sixteen bytes are the
-         * stock ones; a patched exe is left alone. */
+        /* Bypass the CD check only on a verified game layout. The EU/PAL build
+         * stores the drive index at 0x52B8D8; 0x52B8B8 is a render float there.
+         * Both variants are patched in memory before the first instruction. */
         if (g_cfgNoCd) {
             static const BYTE sig[16] = { 0x56,0x8B,0x35,0x30,0x74,0x80,0x00,0xE8,
                                           0x64,0xFF,0xFF,0xFF,0x8B,0x15,0xA0,0xB8 };
             static const BYTE fix[16] = { 0xC7,0x05,0xB8,0xB8,0x52,0x00,0x02,0x00,
                                           0x00,0x00,0xB8,0x01,0x00,0x00,0x00,0xC3 };
-            BYTE cur[16]; SIZE_T got = 0; DWORD old = 0;
+            static const BYTE euSig[16] = { 0x56,0x8B,0x35,0x30,0x74,0x80,0x00,0xE8,
+                                            0x64,0xFF,0xFF,0xFF,0x8B,0x15,0xC0,0xB8 };
+            static const BYTE euFix[16] = { 0xC7,0x05,0xD8,0xB8,0x52,0x00,0x02,0x00,
+                                            0x00,0x00,0xB8,0x01,0x00,0x00,0x00,0xC3 };
+            static const BYTE euWrite[] = { 0xA3,0xD8,0xB8,0x52,0x00 };
+            static const BYTE euRead[]  = { 0xA1,0xD8,0xB8,0x52,0x00 };
+            BYTE cur[16], check[5]; SIZE_T got = 0; DWORD old = 0;
+            const BYTE *patch = NULL;
+            int eu = 0;
             LPVOID at = (LPVOID)(ULONG_PTR)0x0040E4B0u;
-            if (ReadProcessMemory(pi.hProcess, at, cur, 16, &got) && got == 16 &&
-                memcmp(cur, sig, 16) == 0) {
-                if (VirtualProtectEx(pi.hProcess, at, 16, PAGE_EXECUTE_READWRITE, &old) &&
-                    WriteProcessMemory(pi.hProcess, at, fix, 16, &got) && got == 16) {
-                    VirtualProtectEx(pi.hProcess, at, 16, old, &old);
-                    note("launchfix: applied\n");
+            if (!ReadProcessMemory(pi.hProcess, at, cur, sizeof(cur), &got) || got != sizeof(cur)) {
+                note("launchfix: cannot read game code\n");
+            } else if (memcmp(cur, sig, sizeof(sig)) == 0) {
+                patch = fix;
+            } else if (memcmp(cur, euSig, sizeof(euSig)) == 0 &&
+                       ReadProcessMemory(pi.hProcess, (LPCVOID)(ULONG_PTR)0x0040E4C8u,
+                                         check, sizeof(check), &got) && got == sizeof(check) &&
+                       memcmp(check, euWrite, sizeof(check)) == 0 &&
+                       ReadProcessMemory(pi.hProcess, (LPCVOID)(ULONG_PTR)0x00406096u,
+                                         check, sizeof(check), &got) && got == sizeof(check) &&
+                       memcmp(check, euRead, sizeof(check)) == 0) {
+                patch = euFix;
+                eu = 1;
+            } else {
+                note("launchfix: unsupported game code; no patch\n");
+            }
+            if (patch) {
+                if (!VirtualProtectEx(pi.hProcess, at, sizeof(cur), PAGE_EXECUTE_READWRITE, &old)) {
+                    note("launchfix: protection change refused (error %lu)\n",
+                         (unsigned long)GetLastError());
                 } else {
-                    note("launchfix: write refused (error %lu)\n", (unsigned long)GetLastError());
+                    BOOL wrote = WriteProcessMemory(pi.hProcess, at, patch, sizeof(cur), &got) &&
+                                 got == sizeof(cur);
+                    DWORD error = wrote ? 0 : GetLastError();
+                    if (wrote) FlushInstructionCache(pi.hProcess, at, sizeof(cur));
+                    VirtualProtectEx(pi.hProcess, at, sizeof(cur), old, &old);
+                    if (wrote) note("launchfix: applied%s\n", eu ? " (EU/PAL)" : "");
+                    else note("launchfix: write refused (error %lu)\n", (unsigned long)error);
                 }
             }
         }
